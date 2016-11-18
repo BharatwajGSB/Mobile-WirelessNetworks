@@ -166,7 +166,6 @@ AodvExample::CreateNodes ()
 
   // mobility.SetMobilityModel ("ns3::ConstantPositionMobilityModel");
  // mobility.SetMobilityModel ("ns3::RandomWalk2dMobilityModel", "Bounds", RectangleValue (Rectangle (-50, 50, -50, 50)));
-    mobility.SetMobilityModel ("ns3::RandomWaypointMobilityModel", "Speed",StringValue ("ns3::UniformRandomVariable[Min=1|Max=12]"));
 
  /*   mobility.SetPositionAllocator ("ns3::GridPositionAllocator",
                                    "MinX", DoubleValue (0.0),
@@ -176,10 +175,27 @@ AodvExample::CreateNodes ()
                                    "GridWidth", UintegerValue (size/10),
                                    "LayoutType", StringValue ("RowFirst"));
   */
+    int64_t streamIndex = 0; // used to get consistent mobility across scenarios
+    
+    ObjectFactory pos;
+    pos.SetTypeId ("ns3::RandomRectanglePositionAllocator");
+    pos.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
+    pos.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
+    
+    Ptr<PositionAllocator> taPositionAlloc = pos.Create ()->GetObject<PositionAllocator> ();
+    streamIndex += taPositionAlloc->AssignStreams (streamIndex);
+     /*
+    mobility.SetPositionAllocator ("ns3::RandomRectanglePositionAllocator", "X", StringValue("ns3::UniformRandomVariable[Min=0|Max=100]"), "Y", StringValue("ns3::UniformRandomVariable[Min=0|Max=100]") );
+    mobility.Install (nodes);
+      */
+      
+    mobility.SetMobilityModel ("ns3::RandomWaypointMobilityModel", "Speed",StringValue ("ns3::UniformRandomVariable[Min=1|Max=12]"),"PositionAllocator", PointerValue (taPositionAlloc));
+    
+    mobility.SetPositionAllocator (taPositionAlloc);
+    mobility.Install (nodes);
+
 
     
-    mobility.SetPositionAllocator ("ns3::RandomBoxPositionAllocator", "X", StringValue("ns3::UniformRandomVariable[Min=0|Max=100]"), "Y", StringValue("ns3::UniformRandomVariable[Min=0|Max=100]"), "Z", StringValue("ns3::UniformRandomVariable[Min=0|Max=0]"));
-    mobility.Install (nodes);
 }
 
 void
