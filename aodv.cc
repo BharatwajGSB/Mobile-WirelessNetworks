@@ -17,6 +17,8 @@
 #include "ns3/v4ping-helper.h"
 #include <iostream>
 #include <cmath>
+#include "ns3/applications-module.h"
+//#include "ns3/flow-monitor-module.h"
 
 using namespace ns3;
 
@@ -40,6 +42,7 @@ public:
   /// Report results
   void Report (std::ostream & os);
 
+
 private:
 
   // parameters
@@ -58,6 +61,10 @@ private:
   NodeContainer nodes;
   NetDeviceContainer devices;
   Ipv4InterfaceContainer interfaces;
+    // flowmonitor doesnt seem to work with AODV
+    //FlowMonitorHelper flowmon;
+    //Ptr<FlowMonitor> monitor ;
+
 
 private:
   void CreateNodes ();
@@ -141,6 +148,37 @@ AodvExample::Run ()
     }
 
   Simulator::Run ();
+
+    // Print flow charactristics doesnt seem to work with AODV
+    
+    /*
+    monitor->CheckForLostPackets ();
+    Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmon.GetClassifier ());
+    FlowMonitor::FlowStatsContainer stats = monitor->GetFlowStats ();
+    for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+        // first 2 FlowIds are for ECHO apps, we don't want to display them
+        //
+        // Duration for throughput measurement is 9.0 seconds, since
+        //   StartTime of the OnOffApplication is at about "second 1"
+        // and
+        //   Simulator::Stops at "second 10".
+        if (i->first > 0)
+        {
+            Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+            std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+            std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
+            std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+            std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+            std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
+            std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+            std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+        }
+    }
+     */
+  
+    
+    
   Simulator::Destroy ();
 }
 
@@ -238,16 +276,47 @@ AodvExample::InstallInternetStack ()
 void
 AodvExample::InstallApplications ()
 {
-  V4PingHelper ping (interfaces.GetAddress (size - 1));
+   // Ping application
+  /*V4PingHelper ping (interfaces.GetAddress (size - 1));
   ping.SetAttribute ("Verbose", BooleanValue (true));
 
   ApplicationContainer p = ping.Install (nodes.Get (0));
   p.Start (Seconds (0));
   p.Stop (Seconds (totalTime) - Seconds (0.001));
+   */
+   
+    uint16_t sinkPort = 8080;
+    Address sinkAddress (InetSocketAddress (interfaces.GetAddress (0),
+                                            sinkPort));
+    PacketSinkHelper packetSinkHelper ("ns3::TcpSocketFactory",
+                                       sinkAddress);
+    ApplicationContainer sinkApps = packetSinkHelper.Install(nodes.Get (0));
+    sinkApps.Start (Seconds (0));
+    sinkApps.Stop (Seconds (totalTime)-Seconds (0.001));
+    
+   // Address sourceAddress (InetSocketAddress (interfaces.GetAddress (1), sinkPort));
+    OnOffHelper onOffHelper ("ns3::TcpSocketFactory", sinkAddress);
+    onOffHelper.SetAttribute ("OnTime", StringValue
+                              ("ns3::ConstantRandomVariable[Constant=1]"));
+    onOffHelper.SetAttribute ("OffTime", StringValue
+                              ("ns3::ConstantRandomVariable[Constant=0]"));
+    onOffHelper.SetAttribute ("DataRate",StringValue ("1Mbps"));
+    onOffHelper.SetAttribute ("PacketSize", UintegerValue (1024));
+    
+    ApplicationContainer sourceApps;
+    sourceApps.Add (onOffHelper.Install (nodes.Get(1)));
+    
+    // 8. Install FlowMonitor on all nodes
+    // Flowmonitor doesn't seem to work with AODV type protocols
+    //Ptr<FlowMonitor> monitor = flowmon.InstallAll ();
+    
+    sourceApps.Start (Seconds (0));
+    sourceApps.Stop (Seconds (totalTime)-Seconds (0.001));
+
 
   // move node away
   Ptr<Node> node = nodes.Get (size/2);
   Ptr<MobilityModel> mob = node->GetObject<MobilityModel> ();
-  Simulator::Schedule (Seconds (totalTime/3), &MobilityModel::SetPosition, mob, Vector (1e5, 1e5, 1e5));
+  Simulator::Schedule (Seconds (totalTime/3), &MobilityModel::SetPosition, mob, Vector (5e3, 5e3, 5e3));
 }
 
