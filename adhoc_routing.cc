@@ -78,6 +78,8 @@
 #include "ns3/dsr-module.h"
 #include "ns3/applications-module.h"
 #include "ns3/flow-monitor-module.h"
+#include "ns3/netanim-module.h"
+//#include <cmath>
 
 
 using namespace ns3;
@@ -250,7 +252,9 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",StringValue (phyMode));
 
   NodeContainer adhocNodes;
+  //NodeContainer sinkNodes;
   adhocNodes.Create (nWifis);
+  //sinkNodes.Create (nSinks);
 
   // setting up wifi phy and channel using helpers
   WifiHelper wifi;
@@ -275,8 +279,13 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
 
   wifiMac.SetType ("ns3::AdhocWifiMac");
   NetDeviceContainer adhocDevices = wifi.Install (wifiPhy, wifiMac, adhocNodes);
+  //NetDeviceContainer sinkDevices = wifi.Install (wifiPhy, wifiMac, sinkNodes);
+    
 
   MobilityHelper mobilityAdhoc;
+  MobilityHelper sinkmobilityAdhoc;
+
+    
   int64_t streamIndex = 0; // used to get consistent mobility across scenarios
 
   ObjectFactory pos;
@@ -295,9 +304,27 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
                                   "Speed", StringValue (ssSpeed.str ()),
                                   "PositionAllocator", PointerValue (taPositionAlloc));
   mobilityAdhoc.SetPositionAllocator (taPositionAlloc);
-  mobilityAdhoc.Install (adhocNodes);
-  streamIndex += mobilityAdhoc.AssignStreams (adhocNodes, streamIndex);
 
+  
+  for (int i = 1; i < nWifis; i++)
+  {
+  mobilityAdhoc.Install (adhocNodes.Get(i));
+  }
+    
+    
+//    sinkmobilityAdhoc.SetMobilityModel ("ns3::ConstantPositionMobilityModel","Position", VectorValue (Vector (50, 50, 0.0)));
+//    sinkmobilityAdhoc.Install (adhocNodes);
+
+    
+    Ptr<ListPositionAllocator> positionAllocS = CreateObject<ListPositionAllocator> ();
+    positionAllocS->Add(Vector(50.0, 50.0, 0.0));// node 0
+    sinkmobilityAdhoc.SetPositionAllocator(positionAllocS);
+    sinkmobilityAdhoc.SetMobilityModel("ns3::ConstantPositionMobilityModel");
+    sinkmobilityAdhoc.Install(adhocNodes.Get(0));
+    
+    streamIndex += mobilityAdhoc.AssignStreams (adhocNodes, streamIndex);
+  
+    
   AodvHelper aodv;
   OlsrHelper olsr;
   DsdvHelper dsdv;
@@ -400,6 +427,12 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   CheckThroughput ();
 
   Simulator::Stop (Seconds (TotalTime));
+    
+  AnimationInterface anim ("aodv_routing.xml");
+  //anim.SetOutputFile ("aodv_routing.xml");
+  //anim.SetXMLOutput ();
+  //anim.StartAnimation ();
+    
   Simulator::Run ();
 
   flowmon->SerializeToXmlFile ((tr_name + ".flowmon").c_str(), false, false);
