@@ -81,9 +81,10 @@
 #include "ns3/netanim-module.h"
 //#include <cmath>
 
-
 using namespace ns3;
 using namespace dsr;
+using namespace std;
+
 
 NS_LOG_COMPONENT_DEFINE ("manet-routing-compare");
 
@@ -119,7 +120,7 @@ RoutingExperiment::RoutingExperiment ()
     packetsReceived (0),
     m_CSVfileName ("manet-routing.output.csv"),
     m_traceMobility (false),
-    m_protocol (2) // AODV
+    m_protocol (3) // AODV
 {
 }
 
@@ -180,6 +181,10 @@ RoutingExperiment::CheckThroughput ()
 Ptr<Socket>
 RoutingExperiment::SetupPacketReceive (Ipv4Address addr, Ptr<Node> node)
 {
+  std::cout << "Packet rcv add: " << addr<<std::endl;
+ // std::cout << "Packet node add: " << node->GetApplication(1)<<std::endl;
+
+
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   Ptr<Socket> sink = Socket::CreateSocket (node, tid);
   InetSocketAddress local = InetSocketAddress (addr, port);
@@ -221,7 +226,7 @@ main (int argc, char *argv[])
   
   // add 5 sources
   int nSources = 5;
-  double txp = 7.5;
+  double txp = -5;
 
   experiment.Run (nSinks, nSources, txp, CSVfileName);
 }
@@ -243,6 +248,7 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   std::string tr_name ("manet-routing-compare");
   int nodeSpeed = 12; //in m/s
   int nodePause = 0; //in s
+  double posMax = 100.0;
   m_protocolName = "protocol";
 
   Config::SetDefault  ("ns3::OnOffApplication::PacketSize",StringValue ("64"));
@@ -251,10 +257,10 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   //Set Non-unicastMode rate to unicast mode
   Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",StringValue (phyMode));
 
+  NodeContainer sinkNodes;
   NodeContainer adhocNodes;
-  //NodeContainer sinkNodes;
+  sinkNodes.Create (nSinks);
   adhocNodes.Create (nWifis);
-  //sinkNodes.Create (nSinks);
 
   // setting up wifi phy and channel using helpers
   WifiHelper wifi;
@@ -277,9 +283,21 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   wifiPhy.Set ("TxPowerStart",DoubleValue (txp));
   wifiPhy.Set ("TxPowerEnd", DoubleValue (txp));
 
+    std::string ssidString ("wifi-Apwifi");
+    int nodeId = 1;
+    std::stringstream sss;
+    sss << nodeId;
+    ssidString += sss.str ();
+    Ssid ssid = Ssid (ssidString);
+    
+    wifiMac.SetType ("ns3::ApWifiMac",
+                     "Ssid", SsidValue (ssid),
+                     "BeaconGeneration", BooleanValue (true));
+    NetDeviceContainer sinkDevices = wifi.Install (wifiPhy, wifiMac, sinkNodes);
+
+    
   wifiMac.SetType ("ns3::AdhocWifiMac");
   NetDeviceContainer adhocDevices = wifi.Install (wifiPhy, wifiMac, adhocNodes);
-  //NetDeviceContainer sinkDevices = wifi.Install (wifiPhy, wifiMac, sinkNodes);
     
 
   MobilityHelper mobilityAdhoc;
@@ -288,10 +306,13 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
     
   int64_t streamIndex = 0; // used to get consistent mobility across scenarios
 
+  // make posMax command line
   ObjectFactory pos;
+  std::stringstream ssPos;
+  ssPos << "ns3::UniformRandomVariable[Min=0.0|Max=" << posMax << "]";
   pos.SetTypeId ("ns3::RandomRectanglePositionAllocator");
-  pos.Set ("X", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
-  pos.Set ("Y", StringValue ("ns3::UniformRandomVariable[Min=0.0|Max=100.0]"));
+  pos.Set ("X", StringValue (ssPos.str ()));
+  pos.Set ("Y", StringValue (ssPos.str ()));
 
   Ptr<PositionAllocator> taPositionAlloc = pos.Create ()->GetObject<PositionAllocator> ();
   streamIndex += taPositionAlloc->AssignStreams (streamIndex);
@@ -306,7 +327,7 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   mobilityAdhoc.SetPositionAllocator (taPositionAlloc);
 
   
-  for (int i = 1; i < nWifis; i++)
+  for (int i = 0; i < nWifis; i++)
   {
   mobilityAdhoc.Install (adhocNodes.Get(i));
   }
@@ -320,8 +341,10 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
     positionAllocS->Add(Vector(50.0, 50.0, 0.0));// node 0
     sinkmobilityAdhoc.SetPositionAllocator(positionAllocS);
     sinkmobilityAdhoc.SetMobilityModel("ns3::ConstantPositionMobilityModel");
-    sinkmobilityAdhoc.Install(adhocNodes.Get(0));
-    
+ for (int i = 0; i < nSinks; i++)
+  {
+    sinkmobilityAdhoc.Install(sinkNodes.Get(i));
+}    
     streamIndex += mobilityAdhoc.AssignStreams (adhocNodes, streamIndex);
   
     
@@ -358,10 +381,12 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
     {
       internet.SetRoutingHelper (list);
       internet.Install (adhocNodes);
+      internet.Install (sinkNodes);
     }
   else if (m_protocol == 4)
     {
       internet.Install (adhocNodes);
+      internet.Install (sinkNodes);
       dsrMain.Install (dsr, adhocNodes);
     }
 
@@ -369,21 +394,37 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
 
   Ipv4AddressHelper addressAdhoc;
   addressAdhoc.SetBase ("10.1.1.0", "255.255.255.0");
+  Ipv4InterfaceContainer sinkApInterfaces;
+  sinkApInterfaces = addressAdhoc.Assign (sinkDevices); 
   Ipv4InterfaceContainer adhocInterfaces;
   adhocInterfaces = addressAdhoc.Assign (adhocDevices);
+  //  NS_LOG_UNCOND ("Sink node ip is ");
+  //  NS_LOG_UNCOND ("First source ip is ");
 
-  OnOffHelper onoff1 ("ns3::UdpSocketFactory",Address ());
+
+  // Ipv4AddressHelper addressSinkAp;
+ // addressSinkAp.SetBase ("10.1.1.0", "255.255.255.0");
+  //UdpTraceClientHelper client (adhocInterfaces.GetAddress (0), port,"");
+
+    AddressValue remoteAddress (InetSocketAddress (sinkApInterfaces.GetAddress (0), port));
+
+
+    
+  OnOffHelper onoff1 ("ns3::UdpSocketFactory",InetSocketAddress (sinkApInterfaces.GetAddress (0), port));
   onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1.0]"));
   onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
-
-    //setup node 0 as sink
-    Ptr<Socket> sink = SetupPacketReceive (adhocInterfaces.GetAddress (0), adhocNodes.Get (0));
-    
-    AddressValue remoteAddress (InetSocketAddress (adhocInterfaces.GetAddress (0), port));
     onoff1.SetAttribute ("Remote", remoteAddress);
 
     
-  for (int i = 1; i < nSources; i++)
+    //setup node 0 as sink
+    Ptr<Socket> sink = SetupPacketReceive (sinkApInterfaces.GetAddress (0), sinkNodes.Get (0));
+    
+    
+    std::cout << "Sink Address " << sinkApInterfaces.GetAddress (0)<<std::endl;
+    std::cout << "Source 1 Address " << adhocInterfaces.GetAddress (0)<<std::endl;
+
+    
+  for (int i = 0; i < nSources; i++)
     {
       
       Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable> ();
@@ -392,6 +433,12 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
       temp.Stop (Seconds (TotalTime-0.01));
     }
 
+    Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable> ();
+    ApplicationContainer temp = onoff1.Install (sinkNodes);
+    temp.Start (Seconds (var->GetValue (0,1)));
+    temp.Stop (Seconds (TotalTime-0.01));
+
+    
   std::stringstream ss;
   ss << nWifis;
   std::string nodes = ss.str ();
@@ -429,6 +476,8 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   Simulator::Stop (Seconds (TotalTime));
     
   AnimationInterface anim ("aodv_routing.xml");
+  anim.SetMaxPktsPerTraceFile(500000);  //Get rid of the error
+
   //anim.SetOutputFile ("aodv_routing.xml");
   //anim.SetXMLOutput ();
   //anim.StartAnimation ();
