@@ -152,7 +152,7 @@ RoutingExperiment::ReceivePacket (Ptr<Socket> socket)
     {
       bytesTotal += packet->GetSize ();
       packetsReceived += 1;
-      NS_LOG_UNCOND (PrintReceivedPacket (socket, packet, senderAddress));
+  //    NS_LOG_UNCOND (PrintReceivedPacket (socket, packet, senderAddress));
     }
 }
 
@@ -240,7 +240,7 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   m_txp = txp;
   m_CSVfileName = CSVfileName;
 
-  int nWifis = 10;
+  int nWifis = 75;
 
   double TotalTime = 150.0;
   std::string rate ("2048bps");
@@ -251,8 +251,8 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   double posMax = 100.0;
   m_protocolName = "protocol";
 
-  Config::SetDefault  ("ns3::OnOffApplication::PacketSize",StringValue ("64"));
-  Config::SetDefault ("ns3::OnOffApplication::DataRate",  StringValue (rate));
+//  Config::SetDefault  ("ns3::OnOffApplication::PacketSize",StringValue ("64"));
+ // Config::SetDefault ("ns3::OnOffApplication::DataRate",  StringValue (rate));
 
   //Set Non-unicastMode rate to unicast mode
   Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",StringValue (phyMode));
@@ -290,9 +290,9 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
     ssidString += sss.str ();
     Ssid ssid = Ssid (ssidString);
     
-    wifiMac.SetType ("ns3::ApWifiMac",
-                     "Ssid", SsidValue (ssid),
-                     "BeaconGeneration", BooleanValue (true));
+    wifiMac.SetType ("ns3::AdhocWifiMac");
+                    // "Ssid", SsidValue (ssid),
+                    // "BeaconGeneration", BooleanValue (true));
     NetDeviceContainer sinkDevices = wifi.Install (wifiPhy, wifiMac, sinkNodes);
 
     
@@ -406,17 +406,21 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
  // addressSinkAp.SetBase ("10.1.1.0", "255.255.255.0");
   //UdpTraceClientHelper client (adhocInterfaces.GetAddress (0), port,"");
 
-    AddressValue remoteAddress (InetSocketAddress (sinkApInterfaces.GetAddress (0), port));
-
+    AddressValue remoteAddress (InetSocketAddress (adhocInterfaces.GetAddress (0), port));
+Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("100"));
+  Config::SetDefault ("ns3::OnOffApplication::DataRate", StringValue ("20kb/s"));
+  unsigned int maxBytes = 20000*100;
+  std::stringstream ssmaxBytes;
+  ssmaxBytes << maxBytes;
+  Config::SetDefault ("ns3::OnOffApplication::MaxBytes", StringValue (ssmaxBytes.str()));
 
     
-  OnOffHelper onoff1 ("ns3::UdpSocketFactory",InetSocketAddress (sinkApInterfaces.GetAddress (0), port));
-  onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1.0]"));
-  onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
-    onoff1.SetAttribute ("Remote", remoteAddress);
+  OnOffHelper onoff1 ("ns3::UdpSocketFactory",Address(InetSocketAddress (sinkApInterfaces.GetAddress (0), port)));
+  onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.8]"));
+  onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.2]"));
+   // onoff1.SetAttribute ("Remote", remoteAddress);
 
     
-    //setup node 0 as sink
     Ptr<Socket> sink = SetupPacketReceive (sinkApInterfaces.GetAddress (0), sinkNodes.Get (0));
     
     
@@ -433,11 +437,19 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
       temp.Stop (Seconds (TotalTime-0.01));
     }
 
-    Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable> ();
-    ApplicationContainer temp = onoff1.Install (sinkNodes);
-    temp.Start (Seconds (var->GetValue (0,1)));
-    temp.Stop (Seconds (TotalTime-0.01));
+ PacketSinkHelper sinkk ("ns3::UdpSocketFactory",
+                         InetSocketAddress (sinkApInterfaces.GetAddress (0), port));
+  ApplicationContainer temp = sinkk.Install (sinkNodes.Get(0));
+  temp.Start (Seconds (0));
 
+/*
+    Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable> ();
+  onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
+  onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=1.0]"));
+   ApplicationContainer temp = onoff1.Install (sinkNodes);
+    temp.Start (Seconds (var->GetValue (0,1)));
+ //  temp.Stop (Seconds (TotalTime-0.01));
+*/
     
   std::stringstream ss;
   ss << nWifis;
@@ -486,6 +498,32 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
 
   flowmon->SerializeToXmlFile ((tr_name + ".flowmon").c_str(), false, false);
 
+   flowmon->CheckForLostPackets ();
+  Ptr<Ipv4FlowClassifier> classifier = DynamicCast<Ipv4FlowClassifier> (flowmonHelper.GetClassifier ());
+  FlowMonitor::FlowStatsContainer stats = flowmon->GetFlowStats ();
+  for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
+    {
+      // first 2 FlowIds are for ECHO apps, we don't want to display them
+      //
+      // Duration for throughput measurement is 9.0 seconds, since
+      //   StartTime of the OnOffApplication is at about "second 1"
+      // and
+      //   Simulator::Stops at "second 10".
+      if (i->first >= 0)
+        {
+          Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+          std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+          std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
+          std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
+          std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+          std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
+          std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
+          if(i->second.rxPackets)
+          std::cout << "  Ave Delay:  " << (i->second.delaySum)/(i->second.rxPackets) << "\n";
+          std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+        }
+    }
+
+
   Simulator::Destroy ();
 }
-
