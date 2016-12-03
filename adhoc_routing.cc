@@ -86,15 +86,18 @@ using namespace dsr;
 using namespace std;
 
 
-NS_LOG_COMPONENT_DEFINE ("manet-routing-compare");
+NS_LOG_COMPONENT_DEFINE ("Adhoc-routing-compare");
+
+uint32_t nRuns;
 
 class RoutingExperiment
 {
 public:
   RoutingExperiment ();
-  void Run (int nSinks, int nSources, double txp, std::string CSVfileName);
+  void Run (int nSinks, int nSources, double txp, std::string CSVfileName, int64_t streamIndex);
   static void SetMACParam (ns3::NetDeviceContainer & devices, int slotDistance);
   std::string CommandSetup (int argc, char **argv);
+
 
 private:
   Ptr<Socket> SetupPacketReceive (Ipv4Address addr, Ptr<Node> node);
@@ -103,7 +106,10 @@ private:
 
   uint32_t port;
   uint32_t bytesTotal;
+  uint32_t TotalDataRcd;
+
   uint32_t packetsReceived;
+  uint32_t TotalPacketsRcd;
 
   std::string m_CSVfileName;
   int m_nSinks;
@@ -112,19 +118,42 @@ private:
   double m_txp;
   bool m_traceMobility;
   uint32_t m_protocol;
+    
+    uint32_t RunTxPackets;
+    uint32_t RunTxBytes;
+    uint32_t RunRxPackets;
+    uint32_t RunRxBytes;
+    uint32_t RunDelay;
+    
+    uint32_t TotalTxPackets;
+    uint32_t TotalTxBytes;
+    uint32_t TotalRxPackets;
+    uint32_t TotalRxBytes;
+    uint32_t TotalDelay;
+
 };
 
 RoutingExperiment::RoutingExperiment ()
   : port (9),
     bytesTotal (0),
     packetsReceived (0),
-    m_CSVfileName ("manet-routing.output.csv"),
+    m_CSVfileName ("Adhoc-routing.output.csv"),
     m_traceMobility (false),
-    m_protocol (3) // AODV
+    m_protocol (3), // AODV
+    RunTxPackets(0),
+    RunTxBytes(0),
+    RunRxPackets(0),
+    RunRxBytes(0),
+    RunDelay(0),
+    TotalTxPackets(0),
+    TotalTxBytes(0),
+    TotalRxPackets(0),
+    TotalRxBytes(0),
+    TotalDelay(0)
 {
 }
 
-static inline std::string
+/* static inline std::string
 PrintReceivedPacket (Ptr<Socket> socket, Ptr<Packet> packet, Address senderAddress)
 {
   std::ostringstream oss;
@@ -140,9 +169,12 @@ PrintReceivedPacket (Ptr<Socket> socket, Ptr<Packet> packet, Address senderAddre
     {
       oss << " received one packet!";
     }
-  return oss.str ();
+    
+    return oss.str ();
+    
 }
-
+*/
+ 
 void
 RoutingExperiment::ReceivePacket (Ptr<Socket> socket)
 {
@@ -151,8 +183,12 @@ RoutingExperiment::ReceivePacket (Ptr<Socket> socket)
   while ((packet = socket->RecvFrom (senderAddress)))
     {
       bytesTotal += packet->GetSize ();
+      TotalDataRcd += packet->GetSize ();
+
       packetsReceived += 1;
-  //    NS_LOG_UNCOND (PrintReceivedPacket (socket, packet, senderAddress));
+      TotalPacketsRcd += 1;
+        
+//  NS_LOG_UNCOND (PrintReceivedPacket (socket, packet, senderAddress));
     }
 }
 
@@ -160,6 +196,7 @@ void
 RoutingExperiment::CheckThroughput ()
 {
   double kbs = (bytesTotal * 8.0) / 1000;
+  //  std::cout << "BytesTotal: " << bytesTotal<<std::endl;
   bytesTotal = 0;
 
   std::ofstream out (m_CSVfileName.c_str (), std::ios::app);
@@ -228,11 +265,19 @@ main (int argc, char *argv[])
   int nSources = 5;
   double txp = -5;
 
-  experiment.Run (nSinks, nSources, txp, CSVfileName);
+  int64_t streamIndex = 0; // used to get consistent mobility across scenarios
+  nRuns = 2;
+
+    for (int iruns = 0; iruns<nRuns; iruns++)
+    {
+        experiment.Run (nSinks, nSources, txp, CSVfileName, streamIndex);
+        streamIndex += streamIndex;
+    }
+
 }
 
 void
-RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfileName)
+RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfileName,  int64_t streamIndex)
 {
   Packet::EnablePrinting ();
   m_nSinks = nSinks;
@@ -240,12 +285,12 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   m_txp = txp;
   m_CSVfileName = CSVfileName;
 
-  int nWifis = 75;
+  int nWifis = 10;
 
   double TotalTime = 150.0;
   std::string rate ("2048bps");
   std::string phyMode ("DsssRate11Mbps");
-  std::string tr_name ("manet-routing-compare");
+  std::string tr_name ("adhoc-rt-cmpr");
   int nodeSpeed = 12; //in m/s
   int nodePause = 0; //in s
   double posMax = 100.0;
@@ -304,7 +349,7 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   MobilityHelper sinkmobilityAdhoc;
 
     
-  int64_t streamIndex = 0; // used to get consistent mobility across scenarios
+  // int64_t streamIndex = 0; // used to get consistent mobility across scenarios
 
   // make posMax command line
   ObjectFactory pos;
@@ -407,25 +452,25 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   //UdpTraceClientHelper client (adhocInterfaces.GetAddress (0), port,"");
 
     AddressValue remoteAddress (InetSocketAddress (adhocInterfaces.GetAddress (0), port));
-Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("100"));
-  Config::SetDefault ("ns3::OnOffApplication::DataRate", StringValue ("20kb/s"));
-  unsigned int maxBytes = 20000*100;
+Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //100-28 (UDP overhead) = 72
+  Config::SetDefault ("ns3::OnOffApplication::DataRate", StringValue ("160kb/s"));
+  unsigned int maxBytes = 20000*72; // 20,000 x packetsize
   std::stringstream ssmaxBytes;
   ssmaxBytes << maxBytes;
   Config::SetDefault ("ns3::OnOffApplication::MaxBytes", StringValue (ssmaxBytes.str()));
 
     
   OnOffHelper onoff1 ("ns3::UdpSocketFactory",Address(InetSocketAddress (sinkApInterfaces.GetAddress (0), port)));
-  onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.8]"));
-  onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.2]"));
+  onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
+  onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
    // onoff1.SetAttribute ("Remote", remoteAddress);
 
     
     Ptr<Socket> sink = SetupPacketReceive (sinkApInterfaces.GetAddress (0), sinkNodes.Get (0));
     
     
-    std::cout << "Sink Address " << sinkApInterfaces.GetAddress (0)<<std::endl;
-    std::cout << "Source 1 Address " << adhocInterfaces.GetAddress (0)<<std::endl;
+    //std::cout << "Sink Address " << sinkApInterfaces.GetAddress (0)<<std::endl;
+    //std::cout << "Source 1 Address " << adhocInterfaces.GetAddress (0)<<std::endl;
 
     
   for (int i = 0; i < nSources; i++)
@@ -470,9 +515,10 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("100"));
   NS_LOG_INFO ("Configure Tracing.");
   tr_name = tr_name + "_" + m_protocolName +"_" + nodes + "nodes_" + sNodeSpeed + "speed_" + sNodePause + "pause_" + sRate + "rate";
 
-  // AsciiTraceHelper ascii;
-  // Ptr<OutputStreamWrapper> osw = ascii.CreateFileStream ( (tr_name + ".tr").c_str());
-  //wifiPhy.EnableAsciiAll (osw);
+  //AsciiTraceHelper ascii;
+  //Ptr<OutputStreamWrapper> osw = ascii.CreateFileStream ( (tr_name + ".tr").c_str());
+  wifiPhy.EnablePcapAll ("adhoc-routing-compare");
+  
   AsciiTraceHelper ascii;
   MobilityHelper::EnableAsciiAll (ascii.CreateFileStream (tr_name + ".mob"));
 
@@ -487,12 +533,9 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("100"));
 
   Simulator::Stop (Seconds (TotalTime));
     
-  AnimationInterface anim ("aodv_routing.xml");
-  anim.SetMaxPktsPerTraceFile(500000);  //Get rid of the error
+//  AnimationInterface anim ("aodv_routing.xml");
+//  anim.SetMaxPktsPerTraceFile(500000);  //Get rid of the error
 
-  //anim.SetOutputFile ("aodv_routing.xml");
-  //anim.SetXMLOutput ();
-  //anim.StartAnimation ();
     
   Simulator::Run ();
 
@@ -503,26 +546,54 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("100"));
   FlowMonitor::FlowStatsContainer stats = flowmon->GetFlowStats ();
   for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
     {
-      // first 2 FlowIds are for ECHO apps, we don't want to display them
-      //
-      // Duration for throughput measurement is 9.0 seconds, since
-      //   StartTime of the OnOffApplication is at about "second 1"
-      // and
-      //   Simulator::Stops at "second 10".
-      if (i->first >= 0)
-        {
-          Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
-          std::cout << "Flow " << i->first - 2 << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
+      // Duration for throughput measurement is 100.0 seconds, so..
+        Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
+              if ((int)i->first <= nSources)
+       // if (t.destinationAddress == "10.1.1.1")
+      {
+          std::cout << "Flow " << i->first << " (" << t.sourceAddress << " -> " << t.destinationAddress << ")\n";
           std::cout << "  Tx Packets: " << i->second.txPackets << "\n";
           std::cout << "  Tx Bytes:   " << i->second.txBytes << "\n";
-          std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+          std::cout << "  TxOffered:  " << i->second.txBytes * 8.0 / 100 / 1000   << " kbps\n";
           std::cout << "  Rx Packets: " << i->second.rxPackets << "\n";
           std::cout << "  Rx Bytes:   " << i->second.rxBytes << "\n";
           if(i->second.rxPackets)
-          std::cout << "  Ave Delay:  " << (i->second.delaySum)/(i->second.rxPackets) << "\n";
-          std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 9.0 / 1000 / 1000  << " Mbps\n";
+          std::cout << "  Avg Delay:  " << (i->second.delaySum)/(i->second.rxPackets) << "\n";
+          std::cout << "  Throughput: " << i->second.rxBytes * 8.0 / 100 / 1000   << " kbps\n";
+          
+          RunTxPackets += i->second.txPackets ;
+          RunTxBytes += i->second.txBytes;
+          RunRxPackets += i->second.rxPackets;
+          RunRxBytes += i->second.rxBytes;
+          if(i->second.rxPackets)
+          {
+              RunDelay += (i->second.delaySum.GetNanoSeconds())/(i->second.rxPackets) ;
+          }
         }
+ 
     }
+    std::cout << "  Avg Tx Packets this run: " << RunTxPackets/nSources << "\n";
+    std::cout << "  Avg Tx Bytes this run:   " << RunTxBytes/nSources << "\n";
+    std::cout << "  Avg Rx Packets this run: " << RunRxPackets/nSources << "\n";
+    std::cout << "  Avg Rx Bytes this run:   " << RunRxBytes/nSources << "\n";
+    std::cout << "  Avg Delay this run:  " << RunDelay/nSources << "\n";
+    std::cout << "  Avg Throughput this run: " << RunRxBytes/nSources * 8.0 / 100 / 1000   << " kbps\n";
+    
+    TotalTxPackets += RunTxPackets/nSources; RunTxPackets = 0;
+    TotalTxBytes += RunTxBytes/nSources; RunTxBytes = 0;
+    TotalRxPackets += RunRxPackets/nSources; RunRxPackets = 0;
+    TotalRxBytes += RunRxBytes/nSources; RunRxBytes = 0;
+    TotalDelay+= RunDelay/nSources; RunDelay = 0;
+    
+    std::cout << "\n\n  Avg Tx Packets overall: " << TotalTxPackets/nRuns << "\n";
+    std::cout << "  Avg Tx Bytes overall:   " << TotalTxBytes/nRuns << "\n";
+    std::cout << "  Avg Rx Packets overall: " << TotalRxPackets/nRuns << "\n";
+    std::cout << "  Avg Rx Bytes this overall:   " << TotalRxBytes/nRuns << "\n";
+    std::cout << "  Avg Delay overall:  " << TotalDelay/nRuns << "\n";
+    std::cout << "  Avg Throughput overall: " << TotalRxBytes/nRuns * 8.0 / 100 / 1000   << " kbps\n";
+    
+//    std::cout << "Total Bytes Rcd: " << TotalDataRcd <<std::endl;
+//    std::cout << "Total Packets Rcd: " << TotalPacketsRcd <<std::endl;
 
 
   Simulator::Destroy ();
