@@ -1,68 +1,10 @@
-/* -*-  Mode: C++; c-file-style: "gnu"; indent-tabs-mode:nil; -*- */
-/*
- * Copyright (c) 2011 University of Kansas
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation;
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
- *
- * Author: Justin Rohrer <rohrej@ittc.ku.edu>
- *
- * James P.G. Sterbenz <jpgs@ittc.ku.edu>, director
- * ResiliNets Research Group  http://wiki.ittc.ku.edu/resilinets
- * Information and Telecommunication Technology Center (ITTC)
- * and Department of Electrical Engineering and Computer Science
- * The University of Kansas Lawrence, KS USA.
- *
- * Work supported in part by NSF FIND (Future Internet Design) Program
- * under grant CNS-0626918 (Postmodern Internet Architecture),
- * NSF grant CNS-1050226 (Multilayer Network Resilience Analysis and Experimentation on GENI),
- * US Department of Defense (DoD), and ITTC at The University of Kansas.
- */
-
-/*
- * This example program allows one to run ns-3 DSDV, AODV, or OLSR under
- * a typical random waypoint mobility model.
- *
- * By default, the simulation runs for 200 simulated seconds, of which
- * the first 50 are used for start-up time.  The number of nodes is 50.
- * Nodes move according to RandomWaypointMobilityModel with a speed of
- * 20 m/s and no pause time within a 300x1500 m region.  The WiFi is
- * in ad hoc mode with a 2 Mb/s rate (802.11b) and a Friis loss model.
- * The transmit power is set to 7.5 dBm.
- *
- * It is possible to change the mobility and density of the network by
- * directly modifying the speed and the number of nodes.  It is also
- * possible to change the characteristics of the network by changing
- * the transmit power (as power increases, the impact of mobility
- * decreases and the effective density increases).
- *
- * By default, OLSR is used, but specifying a value of 2 for the protocol
- * will cause AODV to be used, and specifying a value of 3 will cause
- * DSDV to be used.
- *
- * By default, there are 10 source/sink data pairs sending UDP data
- * at an application rate of 2.048 Kb/s each.    This is typically done
- * at a rate of 4 64-byte packets per second.  Application data is
- * started at a random time between 50 and 51 seconds and continues
- * to the end of the simulation.
- *
- * The program outputs a few items:
- * - packet receptions are notified to stdout such as:
- *   <timestamp> <node-id> received one packet from <src-address>
- * - each second, the data reception statistics are tabulated and output
- *   to a comma-separated value (csv) file
- * - some tracing and flow monitor configuration that used to work is
- *   left commented inline in the program
+/* EECE 7364 - Team Project
+ Performance evaluation of WiFi adhoc routing protocols (AODV, OLSR, DSDV)
+ Team Members: Bharatwaj Gowri Shankar, Shenghe Zhao & Vikrant Shah
+ 
+ 
+ Objective:
+The goal of this project was to evaluate the performance of On-demand Distance Vector (AODV), Destination Sequenced Distance-Vector (DSDV) and Optimized Link State Routing (OLSR) Ad hoc routing protocols protocols in a varying sized WiFi environments comprising multi-hop paths.
  */
 
 #include <fstream>
@@ -79,16 +21,14 @@
 #include "ns3/applications-module.h"
 #include "ns3/flow-monitor-module.h"
 #include "ns3/netanim-module.h"
-//#include <cmath>
 
 using namespace ns3;
 using namespace dsr;
 using namespace std;
 
-
 NS_LOG_COMPONENT_DEFINE ("Adhoc-routing-compare");
 
-uint32_t nRuns;
+int nRuns;
 
 class RoutingExperiment
 {
@@ -153,6 +93,8 @@ RoutingExperiment::RoutingExperiment ()
 {
 }
 
+// Uncomment the following section to turn on packet notification
+
 /* static inline std::string
 PrintReceivedPacket (Ptr<Socket> socket, Ptr<Packet> packet, Address senderAddress)
 {
@@ -188,6 +130,8 @@ RoutingExperiment::ReceivePacket (Ptr<Socket> socket)
       packetsReceived += 1;
       TotalPacketsRcd += 1;
         
+// Uncomment the following section to turn on packet notification
+        
 //  NS_LOG_UNCOND (PrintReceivedPacket (socket, packet, senderAddress));
     }
 }
@@ -196,13 +140,10 @@ void
 RoutingExperiment::CheckThroughput ()
 {
   double kbs = (bytesTotal * 8.0) / 1000;
-  //  std::cout << "BytesTotal: " << bytesTotal<<std::endl;
   bytesTotal = 0;
-    //static int srate =0;
     std::stringstream ss4;
     ss4 << nRuns;
     std::string sRate = ss4.str ();  std::ofstream out (sRate+m_CSVfileName.c_str (), std::ios::app);
-   // srate++;
   out << (Simulator::Now ()).GetSeconds () << ","
       << kbs << ","
       << packetsReceived << ","
@@ -220,10 +161,6 @@ RoutingExperiment::CheckThroughput ()
 Ptr<Socket>
 RoutingExperiment::SetupPacketReceive (Ipv4Address addr, Ptr<Node> node)
 {
- // std::cout << "Packet rcv add: " << addr<<std::endl;
- // std::cout << "Packet node add: " << node->GetApplication(1)<<std::endl;
-
-
   TypeId tid = TypeId::LookupByName ("ns3::UdpSocketFactory");
   Ptr<Socket> sink = Socket::CreateSocket (node, tid);
   InetSocketAddress local = InetSocketAddress (addr, port);
@@ -263,19 +200,17 @@ main (int argc, char *argv[])
 
   int nSinks = 1;
   
-  // add 5 sources
-  int nSources = 3;
-  double txp = 2.6; //2.5 * 2.5 of the -5db
+  int nSources = 5; // Configure number of source here
+  double txp = -5 ; //2.5 * 2.5 of the -5db = 2.6
 
   int64_t streamIndex = 0; // used to get consistent mobility across scenarios
-  nRuns = 2;
+  nRuns = 1;
 
     for (int iruns = 0; iruns<nRuns; iruns++)
     {
         experiment.Run (nSinks, nSources, txp, CSVfileName, streamIndex);
         streamIndex = streamIndex+50;
     }
-
 }
 
 void
@@ -290,16 +225,13 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   int nWifis = 75;
 
   double TotalTime = 150.0;
-  std::string rate ("2048bps");
+  std::string rate ("160kbps");
   std::string phyMode ("DsssRate11Mbps");
   std::string tr_name ("adhoc-rt-cmpr");
   int nodeSpeed = 12; //in m/s
   int nodePause = 0; //in s
-  double posMax = 250.0;
+  double posMax = 100.0;
   m_protocolName = "protocol";
-
-//  Config::SetDefault  ("ns3::OnOffApplication::PacketSize",StringValue ("64"));
- // Config::SetDefault ("ns3::OnOffApplication::DataRate",  StringValue (rate));
 
   //Set Non-unicastMode rate to unicast mode
   Config::SetDefault ("ns3::WifiRemoteStationManager::NonUnicastMode",StringValue (phyMode));
@@ -313,10 +245,10 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   WifiHelper wifi;
   wifi.SetStandard (WIFI_PHY_STANDARD_80211b);
 
+  // Configure Constant speed prop delay and log distance prop loss
   YansWifiPhyHelper wifiPhy =  YansWifiPhyHelper::Default ();
   YansWifiChannelHelper wifiChannel ;
   wifiChannel.SetPropagationDelay ("ns3::ConstantSpeedPropagationDelayModel");
-//  wifiChannel.AddPropagationLoss ("ns3::FriisPropagationLossModel");
   wifiChannel.AddPropagationLoss ("ns3::LogDistancePropagationLossModel");
 
   wifiPhy.SetChannel (wifiChannel.Create ());
@@ -338,20 +270,13 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
     Ssid ssid = Ssid (ssidString);
     
     wifiMac.SetType ("ns3::AdhocWifiMac");
-                    // "Ssid", SsidValue (ssid),
-                    // "BeaconGeneration", BooleanValue (true));
     NetDeviceContainer sinkDevices = wifi.Install (wifiPhy, wifiMac, sinkNodes);
 
+    wifiMac.SetType ("ns3::AdhocWifiMac");
+    NetDeviceContainer adhocDevices = wifi.Install (wifiPhy, wifiMac, adhocNodes);
     
-  wifiMac.SetType ("ns3::AdhocWifiMac");
-  NetDeviceContainer adhocDevices = wifi.Install (wifiPhy, wifiMac, adhocNodes);
-    
-
-  MobilityHelper mobilityAdhoc;
-  MobilityHelper sinkmobilityAdhoc;
-
-    
-  // int64_t streamIndex = 0; // used to get consistent mobility across scenarios
+    MobilityHelper mobilityAdhoc;
+    MobilityHelper sinkmobilityAdhoc;
 
   // make posMax command line
   ObjectFactory pos;
@@ -366,6 +291,7 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
 
   std::stringstream ssSpeed;
   ssSpeed << "ns3::UniformRandomVariable[Min=1|Max=" << nodeSpeed << "]";
+   // Configure mobility pause behaviour here
   //std::stringstream ssPause;
   //ssPause << "ns3::ConstantRandomVariable[Constant=" << nodePause << "]";
   mobilityAdhoc.SetMobilityModel ("ns3::RandomWaypointMobilityModel",
@@ -373,28 +299,17 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
                                   "PositionAllocator", PointerValue (taPositionAlloc));
   mobilityAdhoc.SetPositionAllocator (taPositionAlloc);
 
-  
-  for (int i = 0; i < nWifis; i++)
-  {
-  mobilityAdhoc.Install (adhocNodes.Get(i));
-  }
-    
-    
-//    sinkmobilityAdhoc.SetMobilityModel ("ns3::ConstantPositionMobilityModel","Position", VectorValue (Vector (50, 50, 0.0)));
-//    sinkmobilityAdhoc.Install (adhocNodes);
-
+  mobilityAdhoc.Install (adhocNodes);
     
     Ptr<ListPositionAllocator> positionAllocS = CreateObject<ListPositionAllocator> ();
     positionAllocS->Add(Vector(posMax/2, posMax/2, 0.0));// node 0
     sinkmobilityAdhoc.SetPositionAllocator(positionAllocS);
     sinkmobilityAdhoc.SetMobilityModel("ns3::ConstantPositionMobilityModel");
- for (int i = 0; i < nSinks; i++)
-  {
-    sinkmobilityAdhoc.Install(sinkNodes.Get(i));
-}    
+    
+    sinkmobilityAdhoc.Install(sinkNodes);
+    
     streamIndex += mobilityAdhoc.AssignStreams (adhocNodes, streamIndex);
   
-    
   AodvHelper aodv;
   OlsrHelper olsr;
   DsdvHelper dsdv;
@@ -445,17 +360,10 @@ RoutingExperiment::Run (int nSinks, int nSources, double txp, std::string CSVfil
   sinkApInterfaces = addressAdhoc.Assign (sinkDevices); 
   Ipv4InterfaceContainer adhocInterfaces;
   adhocInterfaces = addressAdhoc.Assign (adhocDevices);
-  //  NS_LOG_UNCOND ("Sink node ip is ");
-  //  NS_LOG_UNCOND ("First source ip is ");
-
-
-  // Ipv4AddressHelper addressSinkAp;
- // addressSinkAp.SetBase ("10.1.1.0", "255.255.255.0");
-  //UdpTraceClientHelper client (adhocInterfaces.GetAddress (0), port,"");
 
     AddressValue remoteAddress (InetSocketAddress (adhocInterfaces.GetAddress (0), port));
 Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //100-28 (UDP overhead) = 72
-  Config::SetDefault ("ns3::OnOffApplication::DataRate", StringValue ("160kb/s"));
+  Config::SetDefault ("ns3::OnOffApplication::DataRate", StringValue(rate));
   unsigned int maxBytes = 20000*72; // 20,000 x packetsize
   std::stringstream ssmaxBytes;
   ssmaxBytes << maxBytes;
@@ -465,15 +373,10 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //
   OnOffHelper onoff1 ("ns3::UdpSocketFactory",Address(InetSocketAddress (sinkApInterfaces.GetAddress (0), port)));
   onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=1]"));
   onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=0]"));
-   // onoff1.SetAttribute ("Remote", remoteAddress);
-
     
     Ptr<Socket> sink = SetupPacketReceive (sinkApInterfaces.GetAddress (0), sinkNodes.Get (0));
     
     
-    //std::cout << "Sink Address " << sinkApInterfaces.GetAddress (0)<<std::endl;
-    //std::cout << "Source 1 Address " << adhocInterfaces.GetAddress (0)<<std::endl;
-
     
   for (int i = 0; i < nSources; i++)
     {
@@ -489,14 +392,6 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //
   ApplicationContainer temp = sinkk.Install (sinkNodes.Get(0));
   temp.Start (Seconds (0));
 
-/*
-    Ptr<UniformRandomVariable> var = CreateObject<UniformRandomVariable> ();
-  onoff1.SetAttribute ("OnTime", StringValue ("ns3::ConstantRandomVariable[Constant=0.0]"));
-  onoff1.SetAttribute ("OffTime", StringValue ("ns3::ConstantRandomVariable[Constant=1.0]"));
-   ApplicationContainer temp = onoff1.Install (sinkNodes);
-    temp.Start (Seconds (var->GetValue (0,1)));
- //  temp.Stop (Seconds (TotalTime-0.01));
-*/
     
   std::stringstream ss;
   ss << nWifis;
@@ -513,16 +408,21 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //
   std::stringstream ss4;
   ss4 << rate;
   std::string sRate = ss4.str ();
+    
    static int iteration=0;
+    
     std::stringstream ss5;
     ss5 << iteration;
-    std::string siteration = ss5.str ();    NS_LOG_INFO ("Configure Tracing.");
-  tr_name = tr_name + "_" + m_protocolName +"_" + nodes + "nodes_" + siteration + "iteration_" + sNodePause + "pause_" + sRate + "rate";
+    std::string siteration = ss5.str ();
+    
+    std::stringstream ss6;
+    ss6 << posMax;
+    std::string ssposMax = ss6.str ();
+    
+    NS_LOG_INFO ("Configure Tracing.");
+    
+  tr_name = tr_name + "_" + m_protocolName +"_" + nodes + "nodes_" + siteration + "iteration_" + sNodePause + "pause_" + sRate + "rate_"+ssposMax+"grid";
 
-  //AsciiTraceHelper ascii;
-  //Ptr<OutputStreamWrapper> osw = ascii.CreateFileStream ( (tr_name + ".tr").c_str());
-  //wifiPhy.EnablePcapAll ("adhoc-routing-compare");
-  //  wifiPhy.EnablePcap ("sink", sinkDevices);
     
   AsciiTraceHelper ascii;
   MobilityHelper::EnableAsciiAll (ascii.CreateFileStream (tr_name + ".mob"));
@@ -538,8 +438,8 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //
 
   Simulator::Stop (Seconds (TotalTime));
     
- // AnimationInterface anim ("adhoc_routing.xml");
-  // anim.SetMaxPktsPerTraceFile(500000);  //Get rid of the error
+  AnimationInterface anim ("adhoc_routing.xml");
+  anim.SetMaxPktsPerTraceFile(500000);  //Get rid of the error
 
  
     std::string it = std::to_string(iteration);
@@ -556,6 +456,9 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //
   for (std::map<FlowId, FlowMonitor::FlowStats>::const_iterator i = stats.begin (); i != stats.end (); ++i)
     {
       // Duration for throughput measurement is 100.0 seconds, so..
+        
+      //  Uncomment the following section to display flow statistics for each node pair
+        
       //  Ipv4FlowClassifier::FiveTuple t = classifier->FindFlow (i->first);
               if ((int)i->first <= nSources)
        // if (t.destinationAddress == "10.1.1.1")
@@ -606,8 +509,6 @@ Config::SetDefault ("ns3::OnOffApplication::PacketSize", StringValue ("72")); //
     std::cout << "  Avg Throughput overall: " << TotalRxBytes/nRuns * 8.0 / 100 / 1000   << " kbps\n\n";
     }
     checker++;
-//    std::cout << "Total Bytes Rcd: " << TotalDataRcd <<std::endl;
-//    std::cout << "Total Packets Rcd: " << TotalPacketsRcd <<std::endl;
 
 
   Simulator::Destroy ();
